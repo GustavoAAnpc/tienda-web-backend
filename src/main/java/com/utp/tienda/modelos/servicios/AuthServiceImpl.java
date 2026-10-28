@@ -1,6 +1,8 @@
 package com.utp.tienda.modelos.servicios;
 
+import com.utp.tienda.modelos.entidades.CorreoElectronico;
 import com.utp.tienda.modelos.entidades.Usuario;
+import com.utp.tienda.modelos.repositorios.CorreoElectronicoRepository;
 import com.utp.tienda.modelos.repositorios.UsuarioRepository;
 import com.utp.tienda.vistas.dto.LoginRequestDTO;
 import com.utp.tienda.vistas.dto.LoginResponseDTO;
@@ -16,18 +18,30 @@ import java.util.UUID;
 public class AuthServiceImpl implements IAuthService {
 
     private final UsuarioRepository usuarioRepository;
+    private final CorreoElectronicoRepository correoRepository;
     private final PasswordEncryptionStrategy encryptionStrategy;
 
     public AuthServiceImpl(UsuarioRepository usuarioRepository,
+                           CorreoElectronicoRepository correoRepository,
                            @Qualifier("sha256Strategy") PasswordEncryptionStrategy encryptionStrategy) {
         this.usuarioRepository = usuarioRepository;
+        this.correoRepository = correoRepository;
         this.encryptionStrategy = encryptionStrategy;
     }
 
     @Override
     @Transactional
     public LoginResponseDTO procesarLogin(LoginRequestDTO request) {
-        Optional<Usuario> usuarioOpt = usuarioRepository.findByNombreUsuario(request.getNombreUsuario());
+        String acceso = request.getNombreUsuario().trim();
+        Optional<Usuario> usuarioOpt = usuarioRepository.findByNombreUsuario(acceso);
+
+        // Si no se encuentra directamente por nombre de usuario, buscar por correo electrónico registrado
+        if (usuarioOpt.isEmpty()) {
+            Optional<CorreoElectronico> correoOpt = correoRepository.findByCorreoElectronico(acceso.toLowerCase());
+            if (correoOpt.isPresent() && correoOpt.get().getDatosPersonales() != null) {
+                usuarioOpt = Optional.ofNullable(correoOpt.get().getDatosPersonales().getUsuario());
+            }
+        }
 
         if (usuarioOpt.isEmpty()) {
             return LoginResponseDTO.fallo("Credenciales inválidas", 0, false);
@@ -50,7 +64,7 @@ public class AuthServiceImpl implements IAuthService {
             usuarioRepository.save(usuario);
 
             String token = "TK-" + UUID.randomUUID();
-            String rolNombre = usuario.getRol() != null ? usuario.getRol().getNombreRol() : "OPERADOR";
+            String rolNombre = usuario.getRol() != null ? usuario.getRol().getNombreRol() : "CLIENTE";
             return LoginResponseDTO.exito("Inicio de sesión exitoso", token, rolNombre, usuario.getNombreUsuario());
         } else {
             // Contraseña errónea: Incrementar contador
@@ -69,4 +83,3 @@ public class AuthServiceImpl implements IAuthService {
         }
     }
 }
-

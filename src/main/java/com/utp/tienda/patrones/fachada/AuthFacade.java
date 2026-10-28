@@ -1,10 +1,15 @@
 package com.utp.tienda.patrones.fachada;
 
+import com.utp.tienda.modelos.entidades.Usuario;
 import com.utp.tienda.modelos.servicios.IAuthService;
+import com.utp.tienda.modelos.servicios.UsuarioService;
 import com.utp.tienda.vistas.dto.LoginRequestDTO;
 import com.utp.tienda.vistas.dto.LoginResponseDTO;
+import com.utp.tienda.vistas.dto.RegistroRequestDTO;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import java.util.UUID;
 
 /**
  * Patrón Estructural: Facade (Fachada)
@@ -15,14 +20,23 @@ import org.springframework.stereotype.Component;
 public class AuthFacade {
 
     private final IAuthService authService;
+    private final UsuarioService usuarioService;
 
-    public AuthFacade(@Qualifier("authProxy") IAuthService authService) {
+    public AuthFacade(@Qualifier("authProxy") IAuthService authService,
+                      UsuarioService usuarioService) {
         this.authService = authService;
+        this.usuarioService = usuarioService;
     }
 
     public LoginResponseDTO iniciarSesion(String nombreUsuario, String contrasena) {
         LoginRequestDTO dto = new LoginRequestDTO(nombreUsuario, contrasena);
         return authService.procesarLogin(dto);
     }
-}
 
+    public LoginResponseDTO registrarCliente(RegistroRequestDTO dto) {
+        Usuario nuevo = usuarioService.registrarCliente(dto);
+        String token = "TK-" + UUID.randomUUID();
+        String rolNombre = nuevo.getRol() != null ? nuevo.getRol().getNombreRol() : "CLIENTE";
+        return LoginResponseDTO.exito("Registro completado con éxito", token, rolNombre, nuevo.getNombreUsuario());
+    }
+}

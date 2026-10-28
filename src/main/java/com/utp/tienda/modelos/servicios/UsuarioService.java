@@ -1,12 +1,11 @@
 package com.utp.tienda.modelos.servicios;
 
-import com.utp.tienda.modelos.entidades.Rol;
-import com.utp.tienda.modelos.entidades.Usuario;
+import com.utp.tienda.modelos.entidades.*;
 import com.utp.tienda.modelos.factorias.UsuarioFactory;
-import com.utp.tienda.modelos.repositorios.RolRepository;
-import com.utp.tienda.modelos.repositorios.UsuarioRepository;
+import com.utp.tienda.modelos.repositorios.*;
 import com.utp.tienda.patrones.memento.UsuarioCaretaker;
 import com.utp.tienda.patrones.memento.UsuarioMemento;
+import com.utp.tienda.vistas.dto.RegistroRequestDTO;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,17 +18,38 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
+    private final DatosPersonalesRepository datosPersonalesRepository;
+    private final CorreoElectronicoRepository correoRepository;
+    private final DireccionRepository direccionRepository;
+    private final TelefonoRepository telefonoRepository;
+    private final DistritoRepository distritoRepository;
+    private final SexoRepository sexoRepository;
+    private final EstadoCivilRepository estadoCivilRepository;
     private final UsuarioFactory usuarioFactory;
     private final UsuarioCaretaker caretaker;
     private final PasswordEncryptionStrategy encryptionStrategy;
 
     public UsuarioService(UsuarioRepository usuarioRepository,
                           RolRepository rolRepository,
+                          DatosPersonalesRepository datosPersonalesRepository,
+                          CorreoElectronicoRepository correoRepository,
+                          DireccionRepository direccionRepository,
+                          TelefonoRepository telefonoRepository,
+                          DistritoRepository distritoRepository,
+                          SexoRepository sexoRepository,
+                          EstadoCivilRepository estadoCivilRepository,
                           UsuarioFactory usuarioFactory,
                           UsuarioCaretaker caretaker,
                           @Qualifier("sha256Strategy") PasswordEncryptionStrategy encryptionStrategy) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
+        this.datosPersonalesRepository = datosPersonalesRepository;
+        this.correoRepository = correoRepository;
+        this.direccionRepository = direccionRepository;
+        this.telefonoRepository = telefonoRepository;
+        this.distritoRepository = distritoRepository;
+        this.sexoRepository = sexoRepository;
+        this.estadoCivilRepository = estadoCivilRepository;
         this.usuarioFactory = usuarioFactory;
         this.caretaker = caretaker;
         this.encryptionStrategy = encryptionStrategy;
@@ -62,6 +82,79 @@ public class UsuarioService {
     }
 
     @Transactional
+    public Usuario registrarCliente(RegistroRequestDTO dto) {
+        String correoLimpio = dto.getCorreo().trim().toLowerCase();
+
+        // 1. Validar unicidad de correo y nombre de usuario
+        if (correoRepository.existsByCorreoElectronico(correoLimpio) || usuarioRepository.existsByNombreUsuario(correoLimpio)) {
+            throw new IllegalArgumentException("Ese correo electrónico ya se encuentra registrado.");
+        }
+
+        // 2. Rol CLIENTE
+        Rol rolCliente = rolRepository.findByNombreRol("CLIENTE")
+                .orElseGet(() -> rolRepository.save(new Rol(null, "CLIENTE", "Acceso a catálogo y compras")));
+
+        // 3. Encriptar contraseña usando el patrón Strategy
+        String hash = encryptionStrategy.encriptar(dto.getPassword());
+
+        // 4. Instanciar Usuario usando el patrón Factory Method
+        Usuario nuevoUsuario = usuarioFactory.crearUsuario(correoLimpio, hash, rolCliente);
+        Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
+
+        // 5. Crear Datos Personales en 3FN
+        Sexo sexoDefault = sexoRepository.findByDescripcion("No Especifica")
+                .orElseGet(() -> sexoRepository.save(new Sexo(null, "No Especifica")));
+        EstadoCivil estadoCivilDefault = estadoCivilRepository.findByDescripcion("Soltero(a)")
+                .orElseGet(() -> estadoCivilRepository.save(new EstadoCivil(null, "Soltero(a)")));
+
+        DatosPersonales datos = new DatosPersonales();
+        datos.setUsuario(usuarioGuardado);
+        datos.setNombres(dto.getNombre().trim());
+        datos.setApellidos(dto.getApellido().trim());
+        String dni = (dto.getDni() != null && !dto.getDni().isBlank()) 
+                ? dto.getDni().trim() 
+                : "CLI" + String.format("%08d", usuarioGuardado.getIdUsuario());
+        datos.setDni(dni);
+        datos.setSexo(sexoDefault);
+        datos.setEstadoCivil(estadoCivilDefault);
+
+        DatosPersonales datosGuardados = datosPersonalesRepository.save(datos);
+
+        // 6. Registrar Correo Electrónico en 3FN (relación 1:N)
+        CorreoElectronico correo = new CorreoElectronico();
+        correo.setDatosPersonales(datosGuardados);
+        correo.setCorreoElectronico(correoLimpio);
+        correo.setTipoCorreo("PERSONAL");
+        correoRepository.save(correo);
+
+        // 7. Registrar Dirección si fue provista
+        if (dto.getDireccion() != null && !dto.getDireccion().trim().isEmpty()) {
+            Distrito distrito = distritoRepository.findByNombreDistrito("San Juan de Lurigancho")
+                    .orElseGet(() -> distritoRepository.findAll().stream().findFirst().orElse(null));
+
+            Direccion direccion = new Direccion();
+            direccion.setDatosPersonales(datosGuardados);
+            direccion.setDistrito(distrito);
+            direccion.setCalleAvenida(dto.getDireccion().trim());
+            direccion.setTipoDireccion("DOMICILIO");
+            direccion.setNumero("S/N");
+            direccion.setReferencia("Registrado vía Web");
+            direccionRepository.save(direccion);
+        }
+
+        // 8. Registrar Teléfono si fue provisto
+        if (dto.getTelefono() != null && !dto.getTelefono().trim().isEmpty()) {
+            Telefono tel = new Telefono();
+            tel.setDatosPersonales(datosGuardados);
+            tel.setNumeroTelefono(dto.getTelefono().trim());
+            tel.setTipoTelefono("MOVIL");
+            telefonoRepository.save(tel);
+        }
+
+        return usuarioGuardado;
+    }
+
+    @Transactional
     public Usuario actualizarUsuario(Integer id, String nuevoUsername, Boolean bloqueado) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con ID: " + id));
@@ -80,4 +173,3 @@ public class UsuarioService {
         usuarioRepository.deleteById(id);
     }
 }
-
