@@ -32,14 +32,21 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public LoginResponseDTO procesarLogin(LoginRequestDTO request) {
+        if (request == null || request.getNombreUsuario() == null) {
+            return LoginResponseDTO.fallo("Credenciales inválidas", 0, false);
+        }
+
         String acceso = request.getNombreUsuario().trim();
         Optional<Usuario> usuarioOpt = usuarioRepository.findByNombreUsuario(acceso);
 
         // Si no se encuentra directamente por nombre de usuario, buscar por correo electrónico registrado
         if (usuarioOpt.isEmpty()) {
-            Optional<CorreoElectronico> correoOpt = correoRepository.findByCorreoElectronico(acceso.toLowerCase());
-            if (correoOpt.isPresent() && correoOpt.get().getDatosPersonales() != null) {
-                usuarioOpt = Optional.ofNullable(correoOpt.get().getDatosPersonales().getUsuario());
+            Optional<CorreoElectronico> correoOpt = correoRepository.findByCorreoElectronico(acceso);
+            if (correoOpt.isPresent()) {
+                CorreoElectronico ce = correoOpt.get();
+                if (ce.getDatosPersonales() != null && ce.getDatosPersonales().getUsuario() != null) {
+                    usuarioOpt = Optional.of(ce.getDatosPersonales().getUsuario());
+                }
             }
         }
 
@@ -50,7 +57,7 @@ public class AuthServiceImpl implements IAuthService {
         Usuario usuario = usuarioOpt.get();
 
         // 1. Verificar si ya se encuentra bloqueado
-        if (usuario.getBloqueado()) {
+        if (Boolean.TRUE.equals(usuario.getBloqueado())) {
             return LoginResponseDTO.fallo("Cuenta bloqueada. Comuníquese con el administrador.", 0, true);
         }
 
@@ -68,7 +75,7 @@ public class AuthServiceImpl implements IAuthService {
             return LoginResponseDTO.exito("Inicio de sesión exitoso", token, rolNombre, usuario.getNombreUsuario());
         } else {
             // Contraseña errónea: Incrementar contador
-            int nuevosIntentos = usuario.getIntentosFallidos() + 1;
+            int nuevosIntentos = (usuario.getIntentosFallidos() == null ? 0 : usuario.getIntentosFallidos()) + 1;
             usuario.setIntentosFallidos(nuevosIntentos);
 
             if (nuevosIntentos >= 3) {

@@ -7,9 +7,11 @@ import com.utp.tienda.vistas.dto.RegistroRequestDTO;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Controlador MVC para el Módulo de Acceso y Registro (Auth)
@@ -40,26 +42,19 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/registro")
-    public ResponseEntity<?> registrar(@Valid @RequestBody RegistroRequestDTO request) {
+    @PostMapping({"/registro", "/register"})
+    public ResponseEntity<LoginResponseDTO> registrar(@Valid @RequestBody RegistroRequestDTO request) {
         try {
             LoginResponseDTO respuesta = authFacade.registrarCliente(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "exitoso", false,
-                    "mensaje", e.getMessage()
-            ));
+            String mensaje = e.getMessage() != null ? e.getMessage() : "Datos inválidos para el registro";
+            return ResponseEntity.badRequest().body(LoginResponseDTO.fallo(mensaje, 0, false));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                    "exitoso", false,
-                    "mensaje", "Error interno al procesar el registro: " + e.getMessage()
-            ));
+            String mensaje = e.getMessage() != null ? e.getMessage() : "Error interno del servidor";
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(LoginResponseDTO.fallo("Error al procesar el registro: " + mensaje, 0, false));
         }
-    }
 
-    @PostMapping("/register")
-    public ResponseEntity<?> registerAlias(@Valid @RequestBody RegistroRequestDTO request) {
-        return registrar(request);
     }
 }
