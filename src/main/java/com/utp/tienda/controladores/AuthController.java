@@ -1,6 +1,7 @@
 package com.utp.tienda.controladores;
 
 import com.utp.tienda.patrones.fachada.AuthFacade;
+import com.utp.tienda.modelos.servicios.SesionService;
 import com.utp.tienda.vistas.dto.LoginRequestDTO;
 import com.utp.tienda.vistas.dto.LoginResponseDTO;
 import com.utp.tienda.vistas.dto.RegistroRequestDTO;
@@ -24,9 +25,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthFacade authFacade;
+    private final SesionService sesionService;
 
-    public AuthController(AuthFacade authFacade) {
+    public AuthController(AuthFacade authFacade, SesionService sesionService) {
         this.authFacade = authFacade;
+        this.sesionService = sesionService;
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@org.springframework.web.bind.annotation.RequestHeader(value = "Authorization", required = false) String authorization) {
+        sesionService.revocar(authorization);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/login")

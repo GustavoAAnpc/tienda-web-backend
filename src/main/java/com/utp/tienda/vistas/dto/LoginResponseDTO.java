@@ -9,6 +9,7 @@ public class LoginResponseDTO {
     private String token;
     private String rol;
     private String nombreUsuario;
+    private Integer segundosEspera;
 
     public LoginResponseDTO() {}
 
@@ -21,6 +22,7 @@ public class LoginResponseDTO {
         r.nombreUsuario = nombreUsuario;
         r.cuentaBloqueada = false;
         r.intentosRestantes = 3;
+        r.segundosEspera = 0;
         return r;
     }
 
@@ -30,8 +32,17 @@ public class LoginResponseDTO {
         r.mensaje = mensaje;
         r.intentosRestantes = Math.max(0, intentosRestantes);
         r.cuentaBloqueada = cuentaBloqueada;
+        r.segundosEspera = 0;
         return r;
     }
+
+    public static LoginResponseDTO bloqueoTemporal(int segundos) {
+        LoginResponseDTO r = fallo("Demasiados intentos. Vuelve a intentarlo en " + segundos + " segundo(s).", 0, true);
+        r.segundosEspera = segundos;
+        return r;
+    }
+
+    public Integer getSegundosEspera() { return segundosEspera; }
 
     public boolean isExitoso() { return exitoso; }
     public String getMensaje() { return mensaje; }

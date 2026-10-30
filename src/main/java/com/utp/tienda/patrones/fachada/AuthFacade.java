@@ -9,7 +9,7 @@ import com.utp.tienda.vistas.dto.RegistroRequestDTO;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
+import com.utp.tienda.modelos.servicios.SesionService;
 
 /**
  * Patrón Estructural: Facade (Fachada)
@@ -21,11 +21,13 @@ public class AuthFacade {
 
     private final IAuthService authService;
     private final UsuarioService usuarioService;
+    private final SesionService sesionService;
 
     public AuthFacade(@Qualifier("authProxy") IAuthService authService,
-                      UsuarioService usuarioService) {
+                      UsuarioService usuarioService, SesionService sesionService) {
         this.authService = authService;
         this.usuarioService = usuarioService;
+        this.sesionService = sesionService;
     }
 
     public LoginResponseDTO iniciarSesion(String nombreUsuario, String contrasena) {
@@ -35,7 +37,7 @@ public class AuthFacade {
 
     public LoginResponseDTO registrarCliente(RegistroRequestDTO dto) {
         Usuario nuevo = usuarioService.registrarCliente(dto);
-        String token = "TK-" + UUID.randomUUID();
+        String token = sesionService.crear(nuevo.getIdUsuario());
         String rolNombre = nuevo.getRol() != null ? nuevo.getRol().getNombreRol() : "CLIENTE";
         return LoginResponseDTO.exito("Registro completado con éxito", token, rolNombre, nuevo.getNombreUsuario());
     }

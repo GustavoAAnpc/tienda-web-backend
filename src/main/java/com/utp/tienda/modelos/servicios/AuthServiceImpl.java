@@ -11,19 +11,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service("realAuthService")
 public class AuthServiceImpl implements IAuthService {
 
+    private final SesionService sesionService;
     private final UsuarioRepository usuarioRepository;
     private final CorreoElectronicoRepository correoRepository;
     private final PasswordEncryptionStrategy encryptionStrategy;
 
     public AuthServiceImpl(UsuarioRepository usuarioRepository,
                            CorreoElectronicoRepository correoRepository,
+                           SesionService sesionService,
                            @Qualifier("sha256Strategy") PasswordEncryptionStrategy encryptionStrategy) {
+        this.sesionService = sesionService;
         this.usuarioRepository = usuarioRepository;
         this.correoRepository = correoRepository;
         this.encryptionStrategy = encryptionStrategy;
@@ -56,9 +59,19 @@ public class AuthServiceImpl implements IAuthService {
 
         Usuario usuario = usuarioOpt.get();
 
-        // 1. Verificar si ya se encuentra bloqueado
+        // Migración sin SQL manual: los bloqueos permanentes anteriores se liberan
+        // al primer intento porque no tenían fecha de expiración.
+        LocalDateTime ahora = LocalDateTime.now();
         if (Boolean.TRUE.equals(usuario.getBloqueado())) {
-            return LoginResponseDTO.fallo("Cuenta bloqueada. Comuníquese con el administrador.", 0, true);
+            LocalDateTime hasta = usuario.getBloqueadoHasta();
+            if (hasta != null && ahora.isBefore(hasta)) {
+                int segundos = (int) Math.max(1, (Duration.between(ahora, hasta).toMillis() + 999) / 1000);
+                return LoginResponseDTO.bloqueoTemporal(segundos);
+            }
+            usuario.setBloqueado(false);
+            usuario.setBloqueadoHasta(null);
+            usuario.setIntentosFallidos(0);
+            usuarioRepository.save(usuario);
         }
 
         // 2. Verificar contraseña con la estrategia configurada
@@ -67,10 +80,13 @@ public class AuthServiceImpl implements IAuthService {
         if (claveCorrecta) {
             // Éxito: Reiniciar contador de intentos y actualizar último acceso
             usuario.setIntentosFallidos(0);
+            usuario.setNivelBloqueo(0);
+            usuario.setBloqueado(false);
+            usuario.setBloqueadoHasta(null);
             usuario.setUltimoAcceso(LocalDateTime.now());
             usuarioRepository.save(usuario);
 
-            String token = "TK-" + UUID.randomUUID();
+            String token = sesionService.crear(usuario.getIdUsuario());
             String rolNombre = usuario.getRol() != null ? usuario.getRol().getNombreRol() : "CLIENTE";
             return LoginResponseDTO.exito("Inicio de sesión exitoso", token, rolNombre, usuario.getNombreUsuario());
         } else {
@@ -79,9 +95,16 @@ public class AuthServiceImpl implements IAuthService {
             usuario.setIntentosFallidos(nuevosIntentos);
 
             if (nuevosIntentos >= 3) {
+                // 3 errores por ronda: 10s, 20s, 30s, 60s (máximo).
+                int nivel = usuario.getNivelBloqueo();
+                int[] tiempos = {10, 20, 30, 60};
+                int segundos = tiempos[Math.min(nivel, tiempos.length - 1)];
+                usuario.setNivelBloqueo(nivel + 1);
                 usuario.setBloqueado(true);
+                usuario.setBloqueadoHasta(LocalDateTime.now().plusSeconds(segundos));
+                usuario.setIntentosFallidos(0);
                 usuarioRepository.save(usuario);
-                return LoginResponseDTO.fallo("Cuenta bloqueada tras 3 intentos erróneos.", 0, true);
+                return LoginResponseDTO.bloqueoTemporal(segundos);
             } else {
                 usuarioRepository.save(usuario);
                 int restantes = 3 - nuevosIntentos;
