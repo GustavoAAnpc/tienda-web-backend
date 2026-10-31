@@ -52,10 +52,9 @@ public class SecurityHeaderDecoratorFilter implements Filter {
         @Override
         public String getHeader(String name) {
             if ("X-Audited-By".equalsIgnoreCase(name)) {
-                return "UTP-Security-Filter";
+                return "TechStore-Security-Filter";
             }
             return super.getHeader(name);
         }
     }
 }
-
