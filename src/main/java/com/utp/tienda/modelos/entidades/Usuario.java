@@ -35,6 +35,13 @@ public class Usuario {
     @Column(name = "bloqueado")
     private Boolean bloqueado = false;
 
+    // Bloqueo temporal progresivo: Hibernate crea las columnas con ddl-auto=update.
+    @Column(name = "bloqueado_hasta")
+    private LocalDateTime bloqueadoHasta;
+
+    @Column(name = "nivel_bloqueo")
+    private Integer nivelBloqueo = 0;
+
     @Column(name = "token_recuperacion", length = 255)
     private String tokenRecuperacion;
 
@@ -71,6 +78,12 @@ public class Usuario {
 
     public Boolean getBloqueado() { return bloqueado != null && bloqueado; }
     public void setBloqueado(Boolean bloqueado) { this.bloqueado = bloqueado; }
+
+    public LocalDateTime getBloqueadoHasta() { return bloqueadoHasta; }
+    public void setBloqueadoHasta(LocalDateTime bloqueadoHasta) { this.bloqueadoHasta = bloqueadoHasta; }
+
+    public Integer getNivelBloqueo() { return nivelBloqueo == null ? 0 : nivelBloqueo; }
+    public void setNivelBloqueo(Integer nivelBloqueo) { this.nivelBloqueo = nivelBloqueo; }
 
     public String getTokenRecuperacion() { return tokenRecuperacion; }
     public void setTokenRecuperacion(String tokenRecuperacion) { this.tokenRecuperacion = tokenRecuperacion; }
